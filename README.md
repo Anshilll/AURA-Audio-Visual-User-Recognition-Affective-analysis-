@@ -1,7 +1,6 @@
 
 # AURA-Audio-Visual-User-Recognition-Affective-analysis-
 AURA is an advanced application that evaluates emotional states in real-time using live speech, uploaded audio, and webcam interactions. Powered by a custom PyTorch LSTM and face-api.js, it features a stunning glassmorphism UI with responsive lighting and automatic therapeutic interventions for high stress.
-=======
 <div align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Flask-000000?style=for-the-badge&logo=flask&logoColor=white" />
