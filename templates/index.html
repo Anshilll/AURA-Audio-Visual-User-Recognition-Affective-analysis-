@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Emotion AI — Real-time Speech & Face Recognition</title>
+    <meta name="description" content="AI-powered real-time emotion recognition from live speech, audio files, and webcam expressions using LSTM and face-api.js.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Face API -->
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+</head>
+<body>
+
+    <!-- ─── Particle Canvas (background) ─────────────────────────── -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- ─── Ambient Glows ─────────────────────────────────────────── -->
+    <div class="glow-bg glow-bg-1" aria-hidden="true"></div>
+    <div class="glow-bg glow-bg-2" aria-hidden="true"></div>
+    <div class="glow-bg glow-bg-3" aria-hidden="true"></div>
+
+    <!-- ─── Main App ───────────────────────────────────────────────── -->
+    <div class="app-wrapper">
+
+        <!-- ── Hero Header ─────────────────────────────────────────── -->
+        <header class="hero-header">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                <span>AI Model Loaded &amp; Ready</span>
+            </div>
+            <h1 class="hero-title">
+                <span class="gradient-text">Multimodal</span>
+                <span class="hero-title-normal"> Emotion AI</span>
+            </h1>
+            <p class="hero-sub">Analyze emotions from live speech, audio files, or live webcam — powered by LSTM &amp; face-api.js.</p>
+
+            <!-- Live Stats Bar -->
+            <div class="stats-bar" id="stats-bar">
+                <div class="stat-item" id="stat-analyses">
+                    <span class="stat-value" id="stat-count">0</span>
+                    <span class="stat-label">Analyses</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item" id="stat-top-emotion">
+                    <span class="stat-value" id="stat-emotion">—</span>
+                    <span class="stat-label">Top Emotion</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <span class="stat-value" id="stat-mode">Speech</span>
+                    <span class="stat-label">Active Mode</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <span class="stat-value" id="stat-session-time">00:00</span>
+                    <span class="stat-label">Session</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ── Tab Navigation ──────────────────────────────────────── -->
+        <nav class="tab-nav" role="tablist" aria-label="Input Modes">
+            <div class="tab-track">
+                <button class="tab-btn active" data-target="tab-live-audio" id="tab-live-audio-btn" role="tab" aria-selected="true" aria-controls="tab-live-audio">
+                    <i class="fa-solid fa-microphone-lines" aria-hidden="true"></i>
+                    <span>Live Audio</span>
+                    <div class="tab-ripple"></div>
+                </button>
+                <button class="tab-btn" data-target="tab-file-upload" id="tab-file-upload-btn" role="tab" aria-selected="false" aria-controls="tab-file-upload">
+                    <i class="fa-solid fa-file-audio" aria-hidden="true"></i>
+                    <span>Upload</span>
+                    <div class="tab-ripple"></div>
+                </button>
+                <button class="tab-btn" data-target="tab-gesture" id="tab-gesture-btn" role="tab" aria-selected="false" aria-controls="tab-gesture">
+                    <i class="fa-solid fa-face-smile" aria-hidden="true"></i>
+                    <span>Webcam</span>
+                    <div class="tab-ripple"></div>
+                </button>
+                <div class="tab-slider" id="tab-slider"></div>
+            </div>
+        </nav>
+
+        <!-- ── Main Content Grid ───────────────────────────────────── -->
+        <main class="content-grid">
+
+            <!-- ░░ Left: Input Panels ░░ -->
+            <div class="input-column">
+
+                <!-- ──────── Tab 1: Live Audio ──────────── -->
+                <section id="tab-live-audio" class="glass-card tab-panel active" role="tabpanel" aria-labelledby="tab-live-audio-btn">
+                    <div class="card-header">
+                        <div class="card-icon-wrap icon-purple">
+                            <i class="fa-solid fa-waveform-lines" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <h2 class="card-title">Live Recording</h2>
+                            <p class="card-desc">Speak into your mic &amp; detect emotion in real time.</p>
+                        </div>
+                    </div>
+
+                    <!-- Waveform -->
+                    <div class="visualizer-wrap" id="visualizer-wrap">
+                        <canvas id="waveform-canvas" aria-label="Audio waveform visualization"></canvas>
+                        <div class="visualizer-overlay" id="visualizer-overlay">
+                            <i class="fa-solid fa-microphone-slash vis-idle-icon"></i>
+                            <p>Press record to begin</p>
+                        </div>
+                        <div id="recording-indicator" class="rec-badge hidden" aria-live="polite">
+                            <span class="rec-dot"></span>
+                            <span>REC</span>
+                            <span id="rec-timer" class="rec-timer">00:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Audio playback post-record -->
+                    <div id="live-playback-section" class="playback-section hidden">
+                        <p class="playback-label"><i class="fa-solid fa-circle-check" style="color:var(--success-green)"></i> Recording complete</p>
+                        <audio id="live-audio-player" controls class="audio-player"></audio>
+                    </div>
+
+                    <div class="controls-row">
+                        <button id="record-btn" class="btn btn-primary btn-lg" aria-pressed="false">
+                            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+                            <span id="record-btn-label">Start Recording</span>
+                        </button>
+                    </div>
+                    <p class="hint-text"><i class="fa-regular fa-circle-info"></i> Outputs a true .wav file — compatible with the LSTM model.</p>
+                </section>
+
+                <!-- ──────── Tab 2: File Upload ──────────── -->
+                <section id="tab-file-upload" class="glass-card tab-panel hidden" role="tabpanel" aria-labelledby="tab-file-upload-btn">
+                    <div class="card-header">
+                        <div class="card-icon-wrap icon-cyan">
+                            <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <h2 class="card-title">Upload Audio</h2>
+                            <p class="card-desc">Drop or browse a .wav audio file for analysis.</p>
+                        </div>
+                    </div>
+
+                    <!-- Drop Zone -->
+                    <div class="drop-zone" id="upload-area" tabindex="0" role="button" aria-label="Upload audio file area. Click or drag and drop.">
+                        <div class="drop-zone-inner">
+                            <div class="drop-icon-ring">
+                                <i class="fa-solid fa-file-audio drop-icon" aria-hidden="true"></i>
+                            </div>
+                            <p class="drop-title">Drop your .wav file here</p>
+                            <p class="drop-sub">or click to browse</p>
+                            <span class="drop-badge">WAV · MP3 · FLAC</span>
+                        </div>
+                        <input type="file" id="audio-upload-input" accept="audio/*" aria-hidden="true" tabindex="-1">
+                    </div>
+
+                    <!-- File Ready State -->
+                    <div id="file-ready-section" class="file-ready hidden">
+                        <div class="file-info-row">
+                            <div class="file-icon-wrap">
+                                <i class="fa-solid fa-file-waveform" aria-hidden="true"></i>
+                            </div>
+                            <div class="file-meta">
+                                <span id="selected-filename" class="file-name">audio.wav</span>
+                                <span id="selected-filesize" class="file-size"></span>
+                            </div>
+                            <button id="cancel-file-btn" class="btn-icon" aria-label="Remove file">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <audio id="audio-preview" controls class="audio-player"></audio>
+                        <button id="analyze-file-btn" class="btn btn-primary btn-full">
+                            <i class="fa-solid fa-magnifying-glass-chart" aria-hidden="true"></i>
+                            Analyze Emotion
+                        </button>
+                    </div>
+                </section>
+
+                <!-- ──────── Tab 3: Webcam ──────────── -->
+                <section id="tab-gesture" class="glass-card tab-panel hidden" role="tabpanel" aria-labelledby="tab-gesture-btn">
+                    <div class="card-header">
+                        <div class="card-icon-wrap icon-pink">
+                            <i class="fa-solid fa-face-smile" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <h2 class="card-title">Webcam Detection</h2>
+                            <p class="card-desc">Real-time facial expression recognition via face-api.js.</p>
+                        </div>
+                    </div>
+
+                    <div class="video-wrap" id="video-wrap">
+                        <video id="webcam-video" autoplay muted playsinline aria-label="Live webcam feed"></video>
+                        <canvas id="webcam-canvas" class="video-overlay" aria-hidden="true"></canvas>
+
+                        <!-- Scan frame decoration -->
+                        <div class="scan-frame" id="scan-frame" aria-hidden="true">
+                            <div class="scan-corner tl"></div>
+                            <div class="scan-corner tr"></div>
+                            <div class="scan-corner bl"></div>
+                            <div class="scan-corner br"></div>
+                            <div class="scan-line" id="scan-line"></div>
+                        </div>
+
+                        <!-- Loading overlay -->
+                        <div id="webcam-status-loader" class="cam-overlay" role="status" aria-live="polite">
+                            <div class="loader-ring"></div>
+                            <p id="webcam-status-text">Loading AI Models…</p>
+                        </div>
+
+                        <!-- No-face overlay -->
+                        <div id="no-face-overlay" class="cam-overlay hidden">
+                            <i class="fa-solid fa-user-slash" style="font-size:2rem;opacity:0.5;margin-bottom:8px"></i>
+                            <p>No face detected</p>
+                        </div>
+                    </div>
+
+                    <!-- Live face emotion badge -->
+                    <div id="live-face-badge" class="live-face-badge hidden" aria-live="polite">
+                        <span id="lf-emoji" class="lf-emoji">😊</span>
+                        <div class="lf-info">
+                            <span id="lf-label" class="lf-label">Happy</span>
+                            <div class="lf-conf-bar">
+                                <div class="lf-conf-fill" id="lf-conf-fill" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <span id="lf-conf-pct" class="lf-conf-pct">0%</span>
+                    </div>
+
+                    <div class="controls-row">
+                        <button id="toggle-camera-btn" class="btn btn-primary btn-lg">
+                            <i class="fa-solid fa-video" aria-hidden="true"></i>
+                            <span id="cam-btn-label">Start Camera</span>
+                        </button>
+                    </div>
+                    <p class="hint-text"><i class="fa-regular fa-circle-info"></i> Emotions sustained ≥ 3s trigger a therapeutic intervention.</p>
+                </section>
+
+            </div><!-- /input-column -->
+
+            <!-- ░░ Right: Results Panel ░░ -->
+            <section class="glass-card results-card" aria-label="Emotion Detection Results">
+
+                <div class="card-header">
+                    <div class="card-icon-wrap icon-gradient">
+                        <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2 class="card-title">Detection Result</h2>
+                        <p class="card-desc">Emotion scores from the LSTM model.</p>
+                    </div>
+                </div>
+
+                <!-- Placeholder state -->
+                <div id="result-placeholder" class="state-placeholder">
+                    <div class="placeholder-orb">
+                        <i class="fa-solid fa-magnifying-glass-chart" aria-hidden="true"></i>
+                    </div>
+                    <h3>Awaiting Input</h3>
+                    <p>Provide audio or start the webcam to see analysis results here.</p>
+                </div>
+
+                <!-- Loading state -->
+                <div id="loading" class="state-loading hidden" role="status" aria-live="polite">
+                    <div class="pulse-rings">
+                        <div class="ring r1"></div>
+                        <div class="ring r2"></div>
+                        <div class="ring r3"></div>
+                        <div class="ring-center"></div>
+                    </div>
+                    <p class="loading-text">Running LSTM Model…</p>
+                    <p class="loading-sub">Extracting audio features</p>
+                </div>
+
+                <!-- Result content -->
+                <div id="result-content" class="result-content hidden" aria-live="polite">
+
+                    <!-- Primary emotion display -->
+                    <div class="primary-emotion-card">
+                        <div class="emotion-aura" id="emotion-aura"></div>
+                        <div class="emotion-emoji-wrap">
+                            <span class="emotion-emoji" id="detected-emoji" aria-label="Detected emotion emoji">😊</span>
+                        </div>
+                        <div class="emotion-label-group">
+                            <h3 class="emotion-label" id="detected-label">Happiness</h3>
+                            <div class="confidence-row">
+                                <span class="conf-label">Confidence</span>
+                                <span class="conf-value" id="primary-confidence">98.0%</span>
+                            </div>
+                        </div>
+                        <div class="source-tag" id="source-tag">
+                            <i class="fa-solid fa-microphone" aria-hidden="true"></i> Audio
+                        </div>
+                    </div>
+
+                    <!-- Score breakdown -->
+                    <div class="scores-section">
+                        <div class="scores-header">
+                            <h4>Emotion Distribution</h4>
+                            <span class="scores-subtitle">All 6 classes</span>
+                        </div>
+                        <div class="scores-list" id="scores-list" aria-label="Emotion probability breakdown">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <!-- Intervention -->
+                    <div id="intervention-container" class="intervention-container hidden" aria-live="assertive">
+                    </div>
+
+                </div><!-- /result-content -->
+            </section><!-- /results-card -->
+
+        </main><!-- /content-grid -->
+
+        <!-- ── History Timeline ─────────────────────────────────────── -->
+        <section class="glass-card history-card" aria-label="Emotion history">
+            <div class="card-header history-header">
+                <div class="history-title-group">
+                    <div class="card-icon-wrap icon-teal">
+                        <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2 class="card-title">Session History</h2>
+                        <p class="card-desc">All detected emotions this session.</p>
+                    </div>
+                </div>
+                <button id="clear-history-btn" class="btn-ghost" aria-label="Clear history">
+                    <i class="fa-solid fa-trash-can"></i> Clear
+                </button>
+            </div>
+            <div class="history-scroll" id="history-timeline" role="list" aria-label="History of detected emotions">
+                <div class="history-empty" role="listitem">
+                    <i class="fa-regular fa-clock" style="font-size:1.5rem;opacity:0.3;margin-bottom:8px"></i>
+                    <p>No history yet. Start interacting!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Footer ──────────────────────────────────────────────── -->
+        <footer class="site-footer">
+            <div class="footer-inner">
+                <div class="footer-logo">
+                    <i class="fa-solid fa-brain" style="color:var(--accent-purple)"></i>
+                    <span>Multimodal Emotion AI</span>
+                </div>
+                <p class="footer-desc">
+                    Trained on the <strong>IEMOCAP</strong> dataset &bull; LSTM classifier &bull; face-api.js expression detection &bull; Flask backend
+                </p>
+                <div class="footer-badges">
+                    <span class="tech-badge"><i class="fa-brands fa-python"></i> Python / Flask</span>
+                    <span class="tech-badge"><i class="fa-solid fa-database"></i> IEMOCAP</span>
+                    <span class="tech-badge"><i class="fa-solid fa-robot"></i> LSTM</span>
+                    <span class="tech-badge"><i class="fa-brands fa-js"></i> face-api.js</span>
+                </div>
+            </div>
+        </footer>
+
+    </div><!-- /app-wrapper -->
+
+    <!-- Scripts (deferred) -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='gesture.js') }}"></script>
+</body>
+</html>
